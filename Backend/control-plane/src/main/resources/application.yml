@@ -1,0 +1,28 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: webblock-control-plane
+  datasource:
+    url: jdbc:postgresql://localhost:5432/webblock_db
+    username: postgres
+    password: ""
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+ai:
+  service:
+    url: http://localhost:8000
+
+github:
+  token: ${GITHUB_TOKEN:}
+  org: ${GITHUB_ORG:WebBlock-Organization}

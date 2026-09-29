@@ -1,0 +1,56 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model PlatformUser {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  websites     Website[]
+
+  @@map("platform_users")
+}
+
+model Website {
+  tenantId     String        @id @default(dbgenerated("gen_random_uuid()")) @map("tenant_id") @db.Uuid
+  ownerId      String?       @map("owner_id") @db.Uuid
+  domainName   String?       @map("domain_name") @db.VarChar(255)
+  subdomain    String        @unique @db.VarChar(100)
+  status       String?       @default("DRAFT") @db.VarChar(50)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  owner        PlatformUser? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  products     Product[]
+  siteSettings SiteSetting?
+
+  @@map("websites")
+}
+
+model Product {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  title        String   @db.VarChar(255)
+  price        Decimal  @default(0.00) @db.Decimal(12, 2)
+  status       String?  @default("ACTIVE") @db.VarChar(50)
+  customFields Json?    @default("{}") @map("custom_fields")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  website      Website  @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@map("products")
+}
+
+model SiteSetting {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String   @unique @map("tenant_id") @db.Uuid
+  themeConfig         Json?    @default("{}") @map("theme_config")
+  allowedCustomFields Json?    @default("[]") @map("allowed_custom_fields")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  website             Website  @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@map("site_settings")
+}

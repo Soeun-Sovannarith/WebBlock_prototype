@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables & secrets
+.env
+.env.*
+.env*.local
+.env.production
+.env.development
+**/.env
+**/.env.*
+!**/.env.example
+
+# Next.js build
+.next/
+out/
+build/
+dist/
+
+# Java / Maven build
+target/
+*.class
+*.jar
+*.war
+.m2/
+
+# Python virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# IDE / OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Prisma
+/Frontend/prisma/migrations/
