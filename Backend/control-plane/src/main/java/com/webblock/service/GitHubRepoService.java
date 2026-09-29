@@ -29,6 +29,9 @@ public class GitHubRepoService {
     @Value("${github.org:WebBlock-Organization}")
     private String configuredOrg;
 
+    @Value("${ai.service.url:http://localhost:8000}")
+    private String aiServiceUrl;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -1017,7 +1020,12 @@ export default function SingleFileTenantStore() {
                 .replace("__CONTACT_PHONE__", contactPhone)
                 .replace("__CURRENT_YEAR__", String.valueOf(Calendar.getInstance().get(Calendar.YEAR)));
 
-        files.put("src/app/page.tsx", pageContent);
+        String aiCode = fetchAiGeneratedStorefrontCode(website, businessName, heroTitle, heroSubtitle, contactEmail, contactPhone, products);
+        if (aiCode != null && !aiCode.isBlank()) {
+            files.put("src/app/page.tsx", aiCode);
+        } else {
+            files.put("src/app/page.tsx", pageContent);
+        }
 
         // 13. README.md
         files.put("README.md", """
@@ -1072,5 +1080,42 @@ This is a standalone, production-ready e-commerce store generated automatically 
         if (clean.startsWith("-")) clean = clean.substring(1);
         if (clean.endsWith("-")) clean = clean.substring(0, clean.length() - 1);
         return clean.isBlank() ? "store-" + UUID.randomUUID().toString().substring(0, 6) : clean;
+    }
+
+    private String fetchAiGeneratedStorefrontCode(Website website, String businessName, String heroTitle, String heroSubtitle, String contactEmail, String contactPhone, List<Product> products) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("subdomain", website.getSubdomain() != null ? website.getSubdomain() : "store");
+            payload.put("business_name", businessName);
+            payload.put("hero_title", heroTitle);
+            payload.put("hero_subtitle", heroSubtitle);
+            payload.put("contact_email", contactEmail);
+            payload.put("contact_phone", contactPhone);
+            payload.put("products", products != null ? products : Collections.emptyList());
+
+            String jsonPayload = objectMapper.writeValueAsString(payload);
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(aiServiceUrl + "/api/ai/generate-storefront-code"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(20))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() == 200) {
+                JsonNode json = objectMapper.readTree(res.body());
+                String code = json.path("page_tsx").asText(null);
+                if (code != null && !code.isBlank()) {
+                    log.info("Successfully received dynamic AI-generated storefront code for subdomain: {}", website.getSubdomain());
+                    return code;
+                }
+            } else {
+                log.warn("AI code generator endpoint returned status {}. Falling back to default engine.", res.statusCode());
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch code from AI microservice ({}). Using fallback engine.", e.getMessage());
+        }
+        return null;
     }
 }
