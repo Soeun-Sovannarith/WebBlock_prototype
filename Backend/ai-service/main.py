@@ -409,6 +409,12 @@ Return ONLY the raw TypeScript/TSX code. Do NOT wrap with markdown backticks if 
         if not code.startswith('"use client"') and not code.startswith("'use client'"):
             code = '"use client";\n\n' + code
             
+        print("\n" + "="*80, flush=True)
+        print(f"🚀 [AI CODE GENERATOR] Generated Storefront Code for '{req.subdomain}' ({len(code)} characters):", flush=True)
+        print("="*80, flush=True)
+        print(code, flush=True)
+        print("="*80 + "\n", flush=True)
+
         logger.info(f"Successfully generated storefront code for {req.subdomain} directly via Groq AI")
         return GenerateCodeResponse(page_tsx=code)
     except Exception as e:
