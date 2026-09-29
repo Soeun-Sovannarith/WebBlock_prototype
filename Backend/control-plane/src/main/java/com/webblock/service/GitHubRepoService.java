@@ -1022,9 +1022,10 @@ export default function SingleFileTenantStore() {
 
         String aiCode = fetchAiGeneratedStorefrontCode(website, businessName, heroTitle, heroSubtitle, contactEmail, contactPhone, products);
         if (aiCode != null && !aiCode.isBlank()) {
+            log.info("🔥 [AI Code Generation] Successfully pushing 100% live Groq AI-generated page.tsx for subdomain: {}", website.getSubdomain());
             files.put("src/app/page.tsx", aiCode);
         } else {
-            files.put("src/app/page.tsx", pageContent);
+            throw new IllegalStateException("AI Code Generation failed: Unable to generate storefront code via Groq AI model. No fallback used.");
         }
 
         // 13. README.md
