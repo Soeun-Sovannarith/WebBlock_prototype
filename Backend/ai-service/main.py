@@ -348,8 +348,11 @@ def generate_storefront_code(req: GenerateCodeRequest):
     initial_letter = req.business_name.strip()[:1].upper() if req.business_name else "S"
     
     prompt = f"""
-You are a Senior Full-Stack Architect generating production-ready Next.js 14 + Prisma + PostgreSQL code for an e-commerce tenant:
-- Store Name: "{req.business_name}"
+You are a Senior Full-Stack Architect generating production Next.js 14 + Prisma + PostgreSQL code from scratch.
+Write 100% of the code yourself based strictly on the structural architectural specifications below. Do not copy or expect pre-written code snippets.
+
+TENANT DETAILS:
+- Business Name: "{req.business_name}"
 - Subdomain: "{req.subdomain}"
 - Hero Headline: "{req.hero_title or 'The Future of Tech Gear'}"
 - Hero Subtitle: "{req.hero_subtitle or req.tagline or 'Meticulously crafted items for peak lifestyle.'}"
@@ -357,109 +360,62 @@ You are a Senior Full-Stack Architect generating production-ready Next.js 14 + P
 - Contact Email: "{req.contact_email}"
 - Contact Phone: "{req.contact_phone}"
 
-Generate the complete, robust source code for each of the following 5 files using exact delimiters:
+OUTPUT FORMAT:
+Generate the full source code for the 5 files below, separated by the exact delimiter "=== FILE: <filepath> ===".
 
-=== FILE: prisma/schema.prisma ===
-datasource db {{
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}}
+STRUCTURAL SPECIFICATIONS:
 
-generator client {{
-  provider = "prisma-client-js"
-}}
+1. === FILE: prisma/schema.prisma ===
+   - Datasource: PostgreSQL using DATABASE_URL environment variable.
+   - Generator: prisma-client-js.
+   - Model Product (mapped to "products" table):
+     * id: UUID primary key with gen_random_uuid() default
+     * tenantId: UUID mapped to "tenant_id"
+     * title: VarChar(255) string
+     * price: Decimal(12, 2) defaulting to 0.00
+     * status: optional VarChar(50) defaulting to "ACTIVE"
+     * customFields: optional Json mapped to "custom_fields" defaulting to "{{}}"
+     * createdAt: Timestamptz DateTime mapped to "created_at" defaulting to now()
+   - Model SiteSetting (mapped to "site_settings" table):
+     * id: UUID primary key with gen_random_uuid() default
+     * tenantId: unique UUID mapped to "tenant_id"
+     * themeConfig: optional Json mapped to "theme_config" defaulting to "{{}}"
+     * allowedCustomFields: optional Json mapped to "allowed_custom_fields" defaulting to "[]"
+     * updatedAt: Timestamptz DateTime mapped to "updated_at" with @updatedAt
 
-model Product {{
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  title        String   @db.VarChar(255)
-  price        Decimal  @default(0.00) @db.Decimal(12, 2)
-  status       String?  @default("ACTIVE") @db.VarChar(50)
-  customFields Json?    @default("{{}}") @map("custom_fields")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+2. === FILE: src/lib/prisma.ts ===
+   - Declare and export a singleton PrismaClient instance attached to globalThis in development to prevent duplicate client pool connections during Next.js hot-reloading.
 
-  @@map("products")
-}}
+3. === FILE: src/app/api/products/route.ts ===
+   - Next.js 14 App Router dynamic GET handler with dynamic = "force-dynamic".
+   - Read NEXT_PUBLIC_TENANT_ID environment variable; return 400 JSON error if missing.
+   - Use the prisma singleton client to query all ACTIVE products belonging to this tenantId, ordered by createdAt descending.
+   - Return products as JSON or 500 error on exception.
 
-model SiteSetting {{
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String   @unique @map("tenant_id") @db.Uuid
-  themeConfig         Json?    @default("{{}}") @map("theme_config")
-  allowedCustomFields Json?    @default("[]") @map("allowed_custom_fields")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+4. === FILE: src/app/api/settings/route.ts ===
+   - Next.js 14 App Router dynamic GET handler with dynamic = "force-dynamic".
+   - Read NEXT_PUBLIC_TENANT_ID environment variable; return 400 JSON error if missing.
+   - Use the prisma singleton client to query the unique site setting for this tenantId.
+   - Return site setting as JSON or 500 error on exception.
 
-  @@map("site_settings")
-}}
+5. === FILE: src/app/page.tsx ===
+   - Single-file Next.js 14 Client Component starting with "use client".
+   - Import React, useState, useEffect, and Lucide icons (Eye, Sparkles, Truck, ShieldCheck, Leaf, Star, Mail, Phone, MapPin, X, CheckCircle2, Zap, ArrowRight).
+   - Define TypeScript ProductItem interface.
+   - Seed products initially with the provided seed products JSON, and dynamically fetch latest database products from /api/products in useEffect.
+   - Manage state for selected product modal (selectedProduct: ProductItem | null).
+   - Visual Sections:
+     * Announcement bar with promotional text
+     * Sticky glassmorphic navbar with store name, logo badge with initial letter "{initial_letter}", and navigation links
+     * Split hero section with headline, subtitle, and CTA button linking to #products
+     * 4-column statistics counter bar
+     * Featured collection grid of product cards (image, badges, title, price, feature chips, and "View Details" button with Eye icon)
+     * Product detail modal dialog with product image, price, description, feature bullet points with checkmark icons, inquiry CTA, and close button
+     * Why Choose Us value proposition highlights
+     * Contact section with email and phone
+     * Footer with copyright and WebBlock badge
 
-=== FILE: src/lib/prisma.ts ===
-import {{ PrismaClient }} from "@prisma/client";
-
-const globalForPrisma = globalThis as unknown as {{ prisma: PrismaClient }};
-
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-=== FILE: src/app/api/products/route.ts ===
-import {{ NextResponse }} from "next/server";
-import {{ prisma }} from "@/lib/prisma";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {{
-  try {{
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
-    if (!tenantId) {{
-      return NextResponse.json({{ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }}, {{ status: 400 }});
-    }}
-
-    const products = await prisma.product.findMany({{
-      where: {{
-        tenantId: tenantId,
-        status: "ACTIVE",
-      }},
-      orderBy: {{
-        createdAt: "desc",
-      }},
-    }});
-
-    return NextResponse.json(products);
-  }} catch (error: any) {{
-    console.error("Prisma error querying products:", error);
-    return NextResponse.json({{ error: error.message }}, {{ status: 500 }});
-  }}
-}}
-
-=== FILE: src/app/api/settings/route.ts ===
-import {{ NextResponse }} from "next/server";
-import {{ prisma }} from "@/lib/prisma";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {{
-  try {{
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
-    if (!tenantId) {{
-      return NextResponse.json({{ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }}, {{ status: 400 }});
-    }}
-
-    const setting = await prisma.siteSetting.findUnique({{
-      where: {{
-        tenantId: tenantId,
-      }},
-    }});
-
-    return NextResponse.json(setting || {{}});
-  }} catch (error: any) {{
-    console.error("Prisma error querying site settings:", error);
-    return NextResponse.json({{ error: error.message }}, {{ status: 500 }});
-  }}
-}}
-
-=== FILE: src/app/page.tsx ===
-// Next.js 14 Client Component starting with "use client"; importing React, {{ useState, useEffect }} from "react" and Lucide icons Eye, Sparkles, Truck, ShieldCheck, Leaf, Star, Mail, Phone, MapPin, X, CheckCircle2, Zap, ArrowRight from "lucide-react". Defines ProductItem interface, INITIAL_PRODUCTS seeded with {products_json_str}, SingleFileTenantStore component with dynamic fetch("/api/products"), selectedProduct modal state, dark glassmorphic layout, announcement bar, sticky header with initial letter "{initial_letter}", split hero with CTA to #products, 4-stat counter bar, featured collection product grid with "View Details" button, product detail modal with specs and inquire CTA, why choose us features, contact form, and footer.
+Output ONLY the 5 delimited files with complete, working code.
 """
     try:
         completion = client.chat.completions.create(
