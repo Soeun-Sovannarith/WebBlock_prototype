@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 from typing import List, Optional, Dict, Any
@@ -331,20 +332,23 @@ class GenerateCodeRequest(BaseModel):
 
 class GenerateCodeResponse(BaseModel):
     page_tsx: str
-    generated_by: str = "Groq LLaMA Code Engine (WebBlock AI)"
+    schema_prisma: Optional[str] = None
+    prisma_client_ts: Optional[str] = None
+    products_route_ts: Optional[str] = None
+    settings_route_ts: Optional[str] = None
+    generated_by: str = "Groq LLaMA Full-Stack Engine (WebBlock AI)"
 
 @app.post("/api/ai/generate-storefront-code", response_model=GenerateCodeResponse)
 def generate_storefront_code(req: GenerateCodeRequest):
     """
-    Leverages Groq LLM to dynamically generate complete, customized Next.js 14 + Tailwind + Lucide
-    single-file storefront source code for a tenant repository.
+    Leverages Groq LLM to dynamically generate complete, customized Full-Stack Next.js 14 + Prisma + PostgreSQL
+    source code files for a tenant repository (frontend component, schema, client, and API routes).
     """
     products_json_str = json.dumps(req.products or [], indent=2)
     initial_letter = req.business_name.strip()[:1].upper() if req.business_name else "S"
     
     prompt = f"""
-You are a Senior Frontend Architect generating production-ready Next.js 14 (App Router) TypeScript code.
-Generate the complete, single-file client component for `src/app/page.tsx` for:
+You are a Senior Full-Stack Architect generating production-ready Next.js 14 + Prisma + PostgreSQL code for an e-commerce tenant:
 - Store Name: "{req.business_name}"
 - Subdomain: "{req.subdomain}"
 - Hero Headline: "{req.hero_title or 'The Future of Tech Gear'}"
@@ -353,72 +357,192 @@ Generate the complete, single-file client component for `src/app/page.tsx` for:
 - Contact Email: "{req.contact_email}"
 - Contact Phone: "{req.contact_phone}"
 
-MANDATORY TECHNICAL REQUIREMENTS:
-1. Start with `"use client";`.
-2. Import `React, {{ useState, useEffect }}` from `"react"`.
-3. Import icons from `"lucide-react"`: `Eye, Sparkles, Truck, ShieldCheck, Leaf, Star, Mail, Phone, MapPin, X, CheckCircle2, Zap, ArrowRight`.
-4. Define interface `ProductItem`: `id: string; title: string; price: number; customFields?: {{ imageUrl?: string; description?: string; badge?: string; category?: string; features?: string[]; }};`.
-5. Define `INITIAL_PRODUCTS: ProductItem[]` initialized with the products provided.
-6. Main component `export default function SingleFileTenantStore()`.
-7. Dynamic database hydration via `useEffect` calling `fetch("/api/products")`.
-8. Manage `selectedProduct` state (`useState<ProductItem | null>(null)`).
-9. Top announcement bar with glassmorphic dark theme (`bg-[#090d16] text-slate-100 font-sans`).
-10. Sticky navbar displaying Store Name (`{req.business_name}`) with first letter logo icon `{initial_letter}`.
-11. Split hero section with custom headline and CTA button linking to `#products`.
-12. 4-column Stats Counter bar.
-13. Featured Collection product grid. Each product card MUST have:
-    - In-stock badge & category tag
-    - High quality image
-    - Title, price, and description
-    - Feature tags
-    - A "View Details" button with `Eye` icon that opens the Product Detail Modal.
-14. A full Product Detail Modal (`{{selectedProduct && (...)}}`) with:
-    - High-res image
-    - Full title, price, description
-    - Key Specifications bullet list with checkmark icons
-    - Inquire button linking to `#contact` and Back to Catalog button.
-15. Why Choose Us feature cards & Contact form section.
-16. Footer with copyright and WebBlock badge.
+Generate the complete, robust source code for each of the following 5 files using exact delimiters:
 
-Return ONLY the raw TypeScript/TSX code. Do NOT wrap with markdown backticks if possible.
+=== FILE: prisma/schema.prisma ===
+datasource db {{
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}}
+
+generator client {{
+  provider = "prisma-client-js"
+}}
+
+model Product {{
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  title        String   @db.VarChar(255)
+  price        Decimal  @default(0.00) @db.Decimal(12, 2)
+  status       String?  @default("ACTIVE") @db.VarChar(50)
+  customFields Json?    @default("{{}}") @map("custom_fields")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("products")
+}}
+
+model SiteSetting {{
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String   @unique @map("tenant_id") @db.Uuid
+  themeConfig         Json?    @default("{{}}") @map("theme_config")
+  allowedCustomFields Json?    @default("[]") @map("allowed_custom_fields")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("site_settings")
+}}
+
+=== FILE: src/lib/prisma.ts ===
+import {{ PrismaClient }} from "@prisma/client";
+
+const globalForPrisma = globalThis as unknown as {{ prisma: PrismaClient }};
+
+export const prisma =
+  globalForPrisma.prisma ||
+  new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+=== FILE: src/app/api/products/route.ts ===
+import {{ NextResponse }} from "next/server";
+import {{ prisma }} from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {{
+  try {{
+    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
+    if (!tenantId) {{
+      return NextResponse.json({{ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }}, {{ status: 400 }});
+    }}
+
+    const products = await prisma.product.findMany({{
+      where: {{
+        tenantId: tenantId,
+        status: "ACTIVE",
+      }},
+      orderBy: {{
+        createdAt: "desc",
+      }},
+    }});
+
+    return NextResponse.json(products);
+  }} catch (error: any) {{
+    console.error("Prisma error querying products:", error);
+    return NextResponse.json({{ error: error.message }}, {{ status: 500 }});
+  }}
+}}
+
+=== FILE: src/app/api/settings/route.ts ===
+import {{ NextResponse }} from "next/server";
+import {{ prisma }} from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {{
+  try {{
+    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
+    if (!tenantId) {{
+      return NextResponse.json({{ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }}, {{ status: 400 }});
+    }}
+
+    const setting = await prisma.siteSetting.findUnique({{
+      where: {{
+        tenantId: tenantId,
+      }},
+    }});
+
+    return NextResponse.json(setting || {{}});
+  }} catch (error: any) {{
+    console.error("Prisma error querying site settings:", error);
+    return NextResponse.json({{ error: error.message }}, {{ status: 500 }});
+  }}
+}}
+
+=== FILE: src/app/page.tsx ===
+// Next.js 14 Client Component starting with "use client"; importing React, {{ useState, useEffect }} from "react" and Lucide icons Eye, Sparkles, Truck, ShieldCheck, Leaf, Star, Mail, Phone, MapPin, X, CheckCircle2, Zap, ArrowRight from "lucide-react". Defines ProductItem interface, INITIAL_PRODUCTS seeded with {products_json_str}, SingleFileTenantStore component with dynamic fetch("/api/products"), selectedProduct modal state, dark glassmorphic layout, announcement bar, sticky header with initial letter "{initial_letter}", split hero with CTA to #products, 4-stat counter bar, featured collection product grid with "View Details" button, product detail modal with specs and inquire CTA, why choose us features, contact form, and footer.
 """
     try:
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a Next.js 14 and React senior engineer. Output only clean, valid TypeScript JSX code for src/app/page.tsx."},
+                {"role": "system", "content": "You are a Next.js 14, React, TypeScript, and Prisma senior full-stack engineer. Output only the delimited file blocks without conversational banter."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
             max_tokens=4096
         )
-        code = completion.choices[0].message.content or ""
+        raw_content = completion.choices[0].message.content or ""
         
-        # Clean markdown code blocks if the LLM wrapped it in ```tsx ... ```
-        if "```" in code:
-            lines = code.splitlines()
-            cleaned_lines = []
-            inside_block = False
-            for line in lines:
-                if line.strip().startswith("```"):
-                    inside_block = not inside_block
-                    continue
-                cleaned_lines.append(line)
-            code = "\n".join(cleaned_lines).strip()
-            
-        if not code.startswith('"use client"') and not code.startswith("'use client'"):
-            code = '"use client";\n\n' + code
-            
+        # Parse delimited file blocks
+        extracted_files: Dict[str, str] = {}
+        chunks = re.split(r"=== FILE:\s*([^\s=]+)\s*===", raw_content)
+        for i in range(1, len(chunks), 2):
+            filename = chunks[i].strip()
+            file_code = chunks[i+1].strip()
+            # Clean markdown code backticks if the model enclosed it
+            if file_code.startswith("```"):
+                code_lines = file_code.splitlines()
+                if code_lines and code_lines[0].startswith("```"):
+                    code_lines = code_lines[1:]
+                if code_lines and code_lines[-1].startswith("```"):
+                    code_lines = code_lines[:-1]
+                file_code = "\n".join(code_lines).strip()
+            extracted_files[filename] = file_code
+
+        page_code = extracted_files.get("src/app/page.tsx", "")
+        if not page_code and not raw_content.startswith("=== FILE:"):
+            # If the model returned single file code directly
+            page_code = raw_content
+            if "```" in page_code:
+                c_lines = page_code.splitlines()
+                c_clean = []
+                in_b = False
+                for cl in c_lines:
+                    if cl.strip().startswith("```"):
+                        in_b = not in_b
+                        continue
+                    c_clean.append(cl)
+                page_code = "\n".join(c_clean).strip()
+
+        if page_code and not page_code.startswith('"use client"') and not page_code.startswith("'use client'"):
+            page_code = '"use client";\n\n' + page_code
+
+        schema_prisma = extracted_files.get("prisma/schema.prisma", None)
+        prisma_client_ts = extracted_files.get("src/lib/prisma.ts", None)
+        products_route_ts = extracted_files.get("src/app/api/products/route.ts", None)
+        settings_route_ts = extracted_files.get("src/app/api/settings/route.ts", None)
+
         print("\n" + "="*80, flush=True)
-        print(f"🚀 [AI CODE GENERATOR] Generated Storefront Code for '{req.subdomain}' ({len(code)} characters):", flush=True)
+        print(f"🚀 [AI FULL-STACK CODE GENERATOR] Generated Storefront Bundle for '{req.subdomain}':", flush=True)
         print("="*80, flush=True)
-        print(code, flush=True)
+        if schema_prisma:
+            print(f"\n📁 [1/5] prisma/schema.prisma ({len(schema_prisma)} chars):", flush=True)
+            print(schema_prisma, flush=True)
+        if prisma_client_ts:
+            print(f"\n📁 [2/5] src/lib/prisma.ts ({len(prisma_client_ts)} chars):", flush=True)
+            print(prisma_client_ts, flush=True)
+        if products_route_ts:
+            print(f"\n📁 [3/5] src/app/api/products/route.ts ({len(products_route_ts)} chars):", flush=True)
+            print(products_route_ts, flush=True)
+        if settings_route_ts:
+            print(f"\n📁 [4/5] src/app/api/settings/route.ts ({len(settings_route_ts)} chars):", flush=True)
+            print(settings_route_ts, flush=True)
+        if page_code:
+            print(f"\n📁 [5/5] src/app/page.tsx ({len(page_code)} chars):", flush=True)
+            print(page_code, flush=True)
         print("="*80 + "\n", flush=True)
 
-        logger.info(f"Successfully generated storefront code for {req.subdomain} directly via Groq AI")
-        return GenerateCodeResponse(page_tsx=code)
+        logger.info(f"Successfully generated full-stack storefront & Prisma code for {req.subdomain} via Groq AI")
+        return GenerateCodeResponse(
+            page_tsx=page_code,
+            schema_prisma=schema_prisma,
+            prisma_client_ts=prisma_client_ts,
+            products_route_ts=products_route_ts,
+            settings_route_ts=settings_route_ts,
+            generated_by="Groq LLaMA Full-Stack Engine (WebBlock AI)"
+        )
     except Exception as e:
-        logger.error(f"Error calling Groq AI code generator: {e}")
+        logger.error(f"Error calling Groq AI full-stack code generator: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Groq AI Code Generation failed: {str(e)}"

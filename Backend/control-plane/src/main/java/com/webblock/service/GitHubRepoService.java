@@ -352,39 +352,19 @@ module.exports = {
 };
 """);
 
-        // 5. prisma/schema.prisma (PostgreSQL RLS Boundary)
-        files.put("prisma/schema.prisma", """
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+        // Fetch 100% live Groq AI-generated Full-Stack Bundle (Prisma + API Routes + Next.js 14 Client Component)
+        Map<String, String> aiFiles = fetchAiGeneratedStorefrontFiles(website, businessName, heroTitle, heroSubtitle, contactEmail, contactPhone, products);
 
-generator client {
-  provider = "prisma-client-js"
-}
+        if (aiFiles.isEmpty() || !aiFiles.containsKey("page_tsx") || aiFiles.get("page_tsx").isBlank()) {
+            throw new IllegalStateException("AI Full-Stack Generation failed: Groq AI model could not generate the complete storefront code bundle. No fallback used.");
+        }
 
-model Product {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  title        String   @db.VarChar(255)
-  price        Decimal  @default(0.00) @db.Decimal(12, 2)
-  status       String?  @default("ACTIVE") @db.VarChar(50)
-  customFields Json?    @default("{}") @map("custom_fields")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  @@map("products")
-}
-
-model SiteSetting {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String   @unique @map("tenant_id") @db.Uuid
-  themeConfig         Json?    @default("{}") @map("theme_config")
-  allowedCustomFields Json?    @default("[]") @map("allowed_custom_fields")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  @@map("site_settings")
-}
-""");
+        // 5. prisma/schema.prisma (100% Dynamic Groq AI-Generated)
+        if (aiFiles.containsKey("schema_prisma") && !aiFiles.get("schema_prisma").isBlank()) {
+            files.put("prisma/schema.prisma", aiFiles.get("schema_prisma"));
+        } else {
+            throw new IllegalStateException("AI Code Generation failed: schema.prisma not returned by AI model.");
+        }
 
         // 6. .env.example
         files.put(".env.example", """
@@ -413,78 +393,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 """.replace("__BUSINESS_NAME__", businessName));
 
-        // 8. src/lib/prisma.ts (Singleton Prisma Client)
-        files.put("src/lib/prisma.ts", """
-import { PrismaClient } from "@prisma/client";
+        // 8. src/lib/prisma.ts (100% Dynamic Groq AI-Generated)
+        if (aiFiles.containsKey("prisma_client_ts") && !aiFiles.get("prisma_client_ts").isBlank()) {
+            files.put("src/lib/prisma.ts", aiFiles.get("prisma_client_ts"));
+        } else {
+            throw new IllegalStateException("AI Code Generation failed: src/lib/prisma.ts not returned by AI model.");
+        }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+        // 9. src/app/api/products/route.ts (100% Dynamic Groq AI-Generated)
+        if (aiFiles.containsKey("products_route_ts") && !aiFiles.get("products_route_ts").isBlank()) {
+            files.put("src/app/api/products/route.ts", aiFiles.get("products_route_ts"));
+        } else {
+            throw new IllegalStateException("AI Code Generation failed: src/app/api/products/route.ts not returned by AI model.");
+        }
 
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-""");
-
-        // 9. src/app/api/products/route.ts (Next.js App Router API for Database Products)
-        files.put("src/app/api/products/route.ts", """
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {
-  try {
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
-    if (!tenantId) {
-      return NextResponse.json({ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }, { status: 400 });
-    }
-
-    const products = await prisma.product.findMany({
-      where: {
-        tenantId: tenantId,
-        status: "ACTIVE",
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
-
-    return NextResponse.json(products);
-  } catch (error: any) {
-    console.error("Prisma error querying products:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-""");
-
-        // 10. src/app/api/settings/route.ts (Next.js App Router API for Site Settings)
-        files.put("src/app/api/settings/route.ts", """
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-
-export const dynamic = "force-dynamic";
-
-export async function GET() {
-  try {
-    const tenantId = process.env.NEXT_PUBLIC_TENANT_ID;
-    if (!tenantId) {
-      return NextResponse.json({ error: "NEXT_PUBLIC_TENANT_ID is not set in .env" }, { status: 400 });
-    }
-
-    const setting = await prisma.siteSetting.findUnique({
-      where: {
-        tenantId: tenantId,
-      },
-    });
-
-    return NextResponse.json(setting || {});
-  } catch (error: any) {
-    console.error("Prisma error querying site settings:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-""");
+        // 10. src/app/api/settings/route.ts (100% Dynamic Groq AI-Generated)
+        if (aiFiles.containsKey("settings_route_ts") && !aiFiles.get("settings_route_ts").isBlank()) {
+            files.put("src/app/api/settings/route.ts", aiFiles.get("settings_route_ts"));
+        } else {
+            throw new IllegalStateException("AI Code Generation failed: src/app/api/settings/route.ts not returned by AI model.");
+        }
 
         // 11. src/app/globals.css
         files.put("src/app/globals.css", """
@@ -509,14 +437,10 @@ body {
 }
 """);
 
-        // 12. src/app/page.tsx (100% Dynamic Groq AI-Generated Tenant Storefront)
-        String aiCode = fetchAiGeneratedStorefrontCode(website, businessName, heroTitle, heroSubtitle, contactEmail, contactPhone, products);
-        if (aiCode != null && !aiCode.isBlank()) {
-            log.info("🔥 [AI Code Generation] Successfully pushing 100% live Groq AI-generated page.tsx ({} chars) for subdomain: {}", aiCode.length(), website.getSubdomain());
-            files.put("src/app/page.tsx", aiCode);
-        } else {
-            throw new IllegalStateException("AI Code Generation failed: Unable to generate storefront code via Groq AI model. No fallback used.");
-        }
+        // 12. src/app/page.tsx (100% Dynamic Groq AI-Generated Storefront Component)
+        String aiPageTsx = aiFiles.get("page_tsx");
+        log.info("🔥 [AI Full-Stack Code Generation] Successfully pushing 100% live Groq AI-generated page.tsx ({} chars) & Prisma stack for subdomain: {}", aiPageTsx.length(), website.getSubdomain());
+        files.put("src/app/page.tsx", aiPageTsx);
 
         // 13. README.md
         files.put("README.md", """
@@ -573,7 +497,7 @@ This is a standalone, production-ready e-commerce store generated automatically 
         return clean.isBlank() ? "store-" + UUID.randomUUID().toString().substring(0, 6) : clean;
     }
 
-    private String fetchAiGeneratedStorefrontCode(Website website, String businessName, String heroTitle, String heroSubtitle, String contactEmail, String contactPhone, List<Product> products) {
+    private Map<String, String> fetchAiGeneratedStorefrontFiles(Website website, String businessName, String heroTitle, String heroSubtitle, String contactEmail, String contactPhone, List<Product> products) {
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("subdomain", website.getSubdomain() != null ? website.getSubdomain() : "store");
@@ -589,24 +513,28 @@ This is a standalone, production-ready e-commerce store generated automatically 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(aiServiceUrl + "/api/ai/generate-storefront-code"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(20))
+                    .timeout(Duration.ofSeconds(30))
                     .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                     .build();
 
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() == 200) {
                 JsonNode json = objectMapper.readTree(res.body());
-                String code = json.path("page_tsx").asText(null);
-                if (code != null && !code.isBlank()) {
-                    log.info("Successfully received dynamic AI-generated storefront code for subdomain: {}", website.getSubdomain());
-                    return code;
-                }
+                Map<String, String> result = new HashMap<>();
+                if (json.hasNonNull("page_tsx")) result.put("page_tsx", json.path("page_tsx").asText());
+                if (json.hasNonNull("schema_prisma")) result.put("schema_prisma", json.path("schema_prisma").asText());
+                if (json.hasNonNull("prisma_client_ts")) result.put("prisma_client_ts", json.path("prisma_client_ts").asText());
+                if (json.hasNonNull("products_route_ts")) result.put("products_route_ts", json.path("products_route_ts").asText());
+                if (json.hasNonNull("settings_route_ts")) result.put("settings_route_ts", json.path("settings_route_ts").asText());
+                
+                log.info("Successfully received full-stack AI-generated bundle ({} files) for subdomain: {}", result.size(), website.getSubdomain());
+                return result;
             } else {
-                log.error("AI code generator endpoint returned status {}. Cannot generate storefront code.", res.statusCode());
+                log.error("AI code generator endpoint returned status {}. Cannot generate full-stack storefront.", res.statusCode());
             }
         } catch (Exception e) {
             log.error("Could not fetch code from AI microservice: {}", e.getMessage());
         }
-        return null;
+        return Collections.emptyMap();
     }
 }
